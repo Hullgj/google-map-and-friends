@@ -23,7 +23,8 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Scanner;
+
+import uk.ac.kent.gjh9.googlemapandfriends.exceptions.ServerException;
 
 public class WebCaller {
 
@@ -49,17 +50,19 @@ public class WebCaller {
     public String getPolyline() { return polyline; }
 
     public String getWebData(String reqUrl) {
-        String data_string = "";
-//        URL url = null;
+        String data_string = null;
         HttpURLConnection urlConnection = null;
-        InputStream stream_buffer = null;
+        InputStream stream_buffer;
         try {
             URL url = new URL(reqUrl);
             urlConnection = (HttpURLConnection) url.openConnection();
+
             stream_buffer = new BufferedInputStream(urlConnection.getInputStream());
             data_string = streamToString(stream_buffer);
+
         } catch (MalformedURLException e) {
             e.printStackTrace();
+
         } catch (IOException e) {
             e.printStackTrace();
             // If a page is not loaded, but connection was established get the stream error
@@ -92,12 +95,11 @@ public class WebCaller {
             Double lat = u.getDouble("lat");
 
             HashMap<String, Double> user = new HashMap<>();
-
-            names.add(name);
             user.put("lon", lon);
             user.put("lat", lat);
-
             userList.add(user);
+
+            names.add(name);
         }
     }
 
@@ -106,7 +108,10 @@ public class WebCaller {
      * the encoded polyline representing a direction between two or more points
      * @param web_data_string
      */
-    public void getDirections(String web_data_string) throws JSONException {
+    public void getDirections(String web_data_string) throws JSONException, ServerException {
+        if (web_data_string.contains("error_message"))
+            throw new ServerException(getErrorMessage(web_data_string));
+
         JSONObject json_obj = new JSONObject(web_data_string);
 
         JSONObject routes = json_obj.getJSONArray("routes").getJSONObject(0);
