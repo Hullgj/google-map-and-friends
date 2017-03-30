@@ -1,16 +1,9 @@
 package uk.ac.kent.gjh9.googlemapandfriends;
 
-/**
- * Created by gavin on 11/03/2017.
- */
-
 import android.util.Log;
-import android.widget.Toast;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -18,38 +11,52 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
-import java.net.ProtocolException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-
 import uk.ac.kent.gjh9.googlemapandfriends.exceptions.ServerException;
 
-public class WebCaller {
+/**
+ * WebCaller makes a connection to a server over HTTP, parses the data using JSON, and returns
+ * strings of the web call. It has two lists for the coordinates and names of the markers, whereas
+ * the direction is stored as an encoded polyline. There are several checks for errors in the
+ * connection, while parsing the JSON, and any bad responses from the server.
+ *
+ * Created by gavin on 11/03/2017.
+ */
+
+class WebCaller {
 
     private static final String TAG = WebCaller.class.getSimpleName();
-    ArrayList<HashMap<String, Double>> userList;
-    List<String> names;
-    String polyline;
+    private ArrayList<HashMap<String, Double>> userList;
+    private List<String> names;
+    private String polyline;
 
-    public WebCaller() {
+    WebCaller() {
         this.userList = new ArrayList<>();
         this.names = new ArrayList<>();
         this.polyline = null;
     }
 
-    public ArrayList<HashMap<String, Double>> getUserList() {
+    ArrayList<HashMap<String, Double>> getUserList() {
         return userList;
     }
 
-    public List<String> getNames() {
+    List<String> getNames() {
         return names;
     }
 
-    public String getPolyline() { return polyline; }
+    String getPolyline() { return polyline; }
 
-    public String getWebData(String reqUrl) {
+    /**
+     * Establish a connection to a given URL to get a stream of data. We convert this stream to a
+     * string.
+     *
+     * @param reqUrl the URL given and to connect to
+     * @return a string of the response from the server after converting it from a stream
+     */
+    String getWebData(String reqUrl) {
         String data_string = null;
         HttpURLConnection urlConnection = null;
         InputStream stream_buffer;
@@ -70,19 +77,38 @@ public class WebCaller {
                 Log.e(TAG, "getInputStream Error: " + urlConnection.getErrorStream());
             }
         } finally {
+            assert urlConnection != null;
             urlConnection.disconnect();
         }
         return data_string;
     }
 
     /**
+     * Determine the type of data received and call the appropriate JSON parser
+     */
+    int readJSONData(String web_data_string) throws JSONException, ServerException {
+        int result = -1;
+        JSONObject json_obj = new JSONObject(web_data_string);
+        if (web_data_string.contains("error_message")) {
+            throw new ServerException(getErrorMessage(json_obj));
+        }
+        else if(web_data_string.contains("Users")) {
+            getUsersLatLon(json_obj);
+            result = 0;
+        }
+        else if(web_data_string.contains("geocoded_waypoints")) {
+            getDirections(json_obj);
+            result = 1;
+        }
+        return result;
+    }
+
+    /**
      * Parse a string and get the JSON Array of the Users, then for each add the name, longitude
      * latitude into the list and array for access later by the set marker method
-     * @param web_data_string
-     * @throws JSONException
+     * @throws JSONException when a parsing error occurs
      */
-    public void getUsersLatLon(String web_data_string) throws JSONException {
-        JSONObject json_obj = new JSONObject(web_data_string);
+    private void getUsersLatLon(JSONObject json_obj) throws JSONException {
 
         JSONArray users = json_obj.getJSONArray("Users");
 
@@ -106,14 +132,8 @@ public class WebCaller {
     /**
      * Parse the JSON string to get the routes -> overview_polyline -> points, which contains
      * the encoded polyline representing a direction between two or more points
-     * @param web_data_string
      */
-    public void getDirections(String web_data_string) throws JSONException, ServerException {
-        if (web_data_string.contains("error_message"))
-            throw new ServerException(getErrorMessage(web_data_string));
-
-        JSONObject json_obj = new JSONObject(web_data_string);
-
+    private void getDirections(JSONObject json_obj) throws JSONException {
         JSONObject routes = json_obj.getJSONArray("routes").getJSONObject(0);
         polyline = routes.getJSONObject("overview_polyline").getString("points");
     }
@@ -122,16 +142,15 @@ public class WebCaller {
      * When the JSON states an error message from the server
      * we can log and print it for debugging
      */
-    public String getErrorMessage(String web_data_string) throws JSONException {
-        JSONObject error = new JSONObject(web_data_string);
+    private String getErrorMessage(JSONObject error) throws JSONException {
         return error.getString("error_message");
     }
 
     /**
      * Make a string from the stream
      * Adapted from Ravi Tamada - http://www.androidhive.info/2012/01/android-json-parsing-tutorial/
-     * @param is
-     * @return
+     * @param is the input stream from the web call of the raw JSON data
+     * @return a string of the converted stream
      */
     private String streamToString(InputStream is) {
         BufferedReader reader = new BufferedReader(new InputStreamReader(is));
